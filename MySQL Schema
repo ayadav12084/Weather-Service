@@ -1,0 +1,66 @@
+CREATE TABLE regions (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(100) NOT NULL,
+    country_code CHAR(2) NOT NULL,
+    latitude    DECIMAL(8,5) NOT NULL,
+    longitude   DECIMAL(8,5) NOT NULL,
+    timezone    VARCHAR(50) NOT NULL DEFAULT 'UTC',
+    UNIQUE KEY uq_region (name, country_code)
+);
+
+CREATE TABLE weather_conditions (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    code        VARCHAR(20) NOT NULL UNIQUE,  
+    description VARCHAR(100) NOT NULL,         
+    category    VARCHAR(50) NOT NULL           
+);
+
+CREATE TABLE weather_readings (
+    id               BIGINT AUTO_INCREMENT PRIMARY KEY,
+    region_id        INT NOT NULL,
+    condition_id     INT,
+    recorded_at      DATETIME NOT NULL,
+    temp_celsius     DECIMAL(5,2),
+    feels_like       DECIMAL(5,2),
+    humidity_pct     DECIMAL(5,2),
+    pressure_hpa     DECIMAL(7,2),
+    wind_speed_ms    DECIMAL(6,2),
+    wind_dir_deg     SMALLINT,
+    precipitation_mm DECIMAL(6,2) DEFAULT 0.00,
+    cloud_cover_pct  TINYINT UNSIGNED,
+    source_api       VARCHAR(30),
+    FOREIGN KEY (region_id)    REFERENCES regions(id),
+    FOREIGN KEY (condition_id) REFERENCES weather_conditions(id),
+    INDEX idx_region_time (region_id, recorded_at),
+    UNIQUE KEY uq_reading (region_id, recorded_at)
+);
+
+CREATE TABLE model_runs (
+    id            INT AUTO_INCREMENT PRIMARY KEY,
+    region_id     INT NOT NULL,
+    run_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    model_name    VARCHAR(50) NOT NULL,  
+    training_rows INT,
+    mae           DECIMAL(6,3),          
+    rmse          DECIMAL(6,3),          
+    horizon_days  TINYINT DEFAULT 5,
+    FOREIGN KEY (region_id) REFERENCES regions(id)
+);
+
+CREATE TABLE forecasts (
+    id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+    region_id     INT NOT NULL,
+    model_run_id  INT NOT NULL,
+    forecast_for  DATETIME NOT NULL,
+    generated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    temp_min      DECIMAL(5,2),
+    temp_max      DECIMAL(5,2),
+    temp_mean     DECIMAL(5,2),
+    precip_prob   DECIMAL(4,3),          
+    wind_speed_ms DECIMAL(6,2),
+    confidence_lo DECIMAL(5,2),          
+    confidence_hi DECIMAL(5,2),          
+    FOREIGN KEY (region_id)    REFERENCES regions(id),
+    FOREIGN KEY (model_run_id) REFERENCES model_runs(id),
+    INDEX idx_forecast_region_time (region_id, forecast_for)
+);
