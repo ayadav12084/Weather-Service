@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ region.name }} — Weather</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+</head>
+<body>
+
+<!-- ── SIDEBAR ──────────────────────────────────────────────── -->
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <span class="brand-icon">◈</span>
+    <span class="brand-name">Atmos</span>
+  </div>
+
+  <div class="sidebar-label">Regions</div>
+  <ul class="region-list">
+  for r in regions 
+    <li>
+      <a href="/region/{{ r.id }}"
+         class="region-link {% if r.id == region.id %}active{% endif %}">
+        <span class="region-flag">{{ r.country_code }}</span>
+        <span class="region-name">{{ r.name }}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+
+  <div class="sidebar-footer">
+    <span class="sidebar-label">Model</span>
+    <div class="model-toggle">
+      <button class="model-btn active" data-model="prophet">Prophet</button>
+      <button class="model-btn" data-model="random_forest">RF</button>
+    </div>
+  </div>
+</nav>
+
+<!-- ── MAIN ─────────────────────────────────────────────────── -->
+<main class="main">
+
+  <!-- Header -->
+  <header class="page-header">
+    <div class="header-left">
+      <h1 class="region-title">{{ region.name }}</h1>
+      <span class="region-meta">{{ region.country_code }} &nbsp;·&nbsp;
+        {{ "%.4f"|format(region.latitude) }}° N,
+        {{ "%.4f"|format(region.longitude) }}° E
+      </span>
+    </div>
+    <div class="header-right">
+      <div class="range-selector">
+        <button class="range-btn active" data-days="7">7d</button>
+        <button class="range-btn" data-days="14">14d</button>
+        <button class="range-btn" data-days="30">30d</button>
+      </div>
+      <div class="last-updated" id="last-updated">—</div>
+    </div>
+  </header>
+
+  <!-- ── Current conditions ── -->
+  {% if current %}
+  <section class="current-grid">
+
+    <div class="current-card primary">
+      <div class="current-label">Temperature</div>
+      <div class="current-value large">
+        {{ "%.1f"|format(current.temp_celsius) }}<span class="unit">°C</span>
+      </div>
+      <div class="current-sub">Feels {{ "%.1f"|format(current.feels_like) }}°C</div>
+      {% if current.condition %}
+      <div class="condition-badge">{{ current.condition }}</div>
+      {% endif %}
+    </div>
+
+    <div class="current-card">
+      <div class="current-label">Humidity</div>
+      <div class="current-value">{{ current.humidity_pct|int }}<span class="unit">%</span></div>
+      <div class="spark-bar">
+        <div class="spark-fill" style="width:{{ current.humidity_pct }}%"></div>
+      </div>
+    </div>
+
+    <div class="current-card">
+      <div class="current-label">Pressure</div>
+      <div class="current-value">{{ current.pressure_hpa|int }}<span class="unit">hPa</span></div>
+    </div>
+
+    <div class="current-card">
+      <div class="current-label">Wind</div>
+      <div class="current-value">{{ "%.1f"|format(current.wind_speed_ms) }}<span class="unit">m/s</span></div>
+      {% if current.wind_dir_deg is not none %}
+      <div class="wind-compass">
+        <div class="compass-needle" style="transform:rotate({{ current.wind_dir_deg }}deg)">↑</div>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="current-card">
+      <div class="current-label">Precipitation</div>
+      <div class="current-value">{{ "%.1f"|format(current.precipitation_mm) }}<span class="unit">mm</span></div>
+    </div>
+
+    <div class="current-card">
+      <div class="current-label">Cloud cover</div>
+      <div class="current-value">{{ current.cloud_cover_pct|int }}<span class="unit">%</span></div>
+      <div class="spark-bar">
+        <div class="spark-fill cloud" style="width:{{ current.cloud_cover_pct }}%"></div>
+      </div>
+    </div>
+
+  </section>
+  {% endif %}
+
+  <!-- ── Charts ── -->
+  <section class="charts-grid">
+
+    <div class="chart-card wide">
+      <div class="chart-header">
+        <span class="chart-title">Temperature trend</span>
+        <span class="chart-meta" id="temp-mae"></span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="chart-temp"></canvas>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-header">
+        <span class="chart-title">Humidity</span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="chart-humidity"></canvas>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-header">
+        <span class="chart-title">Precipitation</span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="chart-precip"></canvas>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ── 5-day forecast ── -->
+  <section class="forecast-section">
+    <div class="section-header">
+      <span class="section-title">Forecast</span>
+      <span class="forecast-model" id="forecast-model-label"></span>
+    </div>
+    <div class="forecast-cards" id="forecast-cards">
+      <div class="forecast-loading">Loading forecast…</div>
+    </div>
+  </section>
+
+  <!-- ── Daily summary table ── -->
+  <section class="table-section">
+    <div class="section-header">
+      <span class="section-title">Daily summary</span>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table" id="daily-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Min °C</th>
+            <th>Max °C</th>
+            <th>Precip mm</th>
+          </tr>
+        </thead>
+        <tbody id="daily-tbody">
+          <tr><td colspan="4" class="loading-row">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<!-- Chart.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+  window.REGION_ID = {{ region.id }};
+</script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>
